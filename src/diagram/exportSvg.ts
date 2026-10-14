@@ -22,7 +22,7 @@ function freezeComputedStyles(original: Element, clone: Element): void {
   let node = originalWalker.nextNode();
   let cloneNode = cloneWalker.nextNode();
   while (node && cloneNode) {
-    applyStyle(node, cloneNode);
+    applyStyle(node as Element, cloneNode as Element);
     node = originalWalker.nextNode();
     cloneNode = cloneWalker.nextNode();
   }

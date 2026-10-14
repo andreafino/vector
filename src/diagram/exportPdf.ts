@@ -41,7 +41,7 @@ export async function requestDiagramPdf(diagram: Diagram, svgEl: SVGSVGElement, 
   // evita di dipendere da un'Azure Function in esecuzione per testare l'export.
   if (window.vectorDesktop?.exportPdf) {
     const pdfBytes = await window.vectorDesktop.exportPdf(payload);
-    return new Blob([pdfBytes], { type: "application/pdf" });
+    return new Blob([pdfBytes.slice().buffer as ArrayBuffer], { type: "application/pdf" });
   }
 
   const res = await fetch(`${API_BASE}/export-pdf`, {
