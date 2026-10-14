@@ -33,7 +33,8 @@ import { EntityCreateForm, EdgeCreateForm, BandCreateForm, TechnologyCreateForm 
 import { IconChangeDialog } from "./IconChangeDialog";
 import type { EditMode, Theme } from "./types";
 import { fromFileContents, toFileContents } from "../persistence/diagramFile";
-import { isAbort, openDiagramFile, saveDiagramFile, type FileSystemFileHandleLike } from "../persistence/localFileStore";
+import { downloadBlob, isAbort, openDiagramFile, saveDiagramFile, type FileSystemFileHandleLike } from "../persistence/localFileStore";
+import { requestDiagramPdf, type PdfQuality } from "./exportPdf";
 import { readStoredTheme, writeStoredTheme } from "../theme/themeStorage";
 import { EMPTY_DIAGRAM } from "./emptyDiagram";
 import { ChatIcon, ExpandSidebarIcon, MoonIcon, SunIcon } from "./icons";
@@ -134,6 +135,30 @@ export function DiagramViewer({ diagram, title, subtitle, inTeams }: Props) {
       return false;
     }
   }, [displayTitle, fileHandle]);
+
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [qualityDialogOpen, setQualityDialogOpen] = useState(false);
+  const handleExportPdf = useCallback(
+    async (quality: PdfQuality) => {
+      const svgEl = stageRef.current?.querySelector("svg");
+      if (!svgEl) return;
+      setIsExportingPdf(true);
+      try {
+        const blob = await requestDiagramPdf(diagram, svgEl, displayTitle, quality);
+        downloadBlob(blob, `${slugify(displayTitle)}.pdf`);
+        setFileMessage(null);
+      } catch (err) {
+        setFileMessage(err instanceof Error ? err.message : "Esportazione PDF non riuscita.");
+      } finally {
+        setIsExportingPdf(false);
+      }
+    },
+    [diagram, displayTitle, stageRef]
+  );
+  const chooseExportQuality = (quality: PdfQuality) => {
+    setQualityDialogOpen(false);
+    void handleExportPdf(quality);
+  };
 
   const resetToNewDiagram = () => {
     const version: Version = { numero: 0, diagramma: EMPTY_DIAGRAM, descrizione: "Nuovo diagramma", origine: "manuale", autore: "Utente", data: new Date().toISOString() };
@@ -734,6 +759,70 @@ export function DiagramViewer({ diagram, title, subtitle, inTeams }: Props) {
         </>
       )}
 
+      {qualityDialogOpen && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 30, background: "rgba(0,0,0,.35)" }} onClick={() => setQualityDialogOpen(false)} />
+          <div
+            style={{
+              position: "fixed",
+              left: "50%",
+              top: "50%",
+              transform: "translate(-50%,-50%)",
+              zIndex: 31,
+              background: "var(--card)",
+              border: "1px solid var(--rule)",
+              borderRadius: 10,
+              boxShadow: "0 12px 32px rgba(0,0,0,.25)",
+              padding: 20,
+              width: 340,
+              display: "grid",
+              gap: 14,
+            }}
+          >
+            <strong style={{ fontFamily: "'Barlow Semi Condensed',sans-serif", fontSize: 16 }}>Qualità di stampa</strong>
+            <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)" }}>Una qualità più alta produce un PDF più nitido (anche zoommando), ma più pesante e lento da generare.</p>
+            <div style={{ display: "grid", gap: 8 }}>
+              {(
+                [
+                  { quality: "low" as const, label: "Bassa", hint: "600 DPI · qualità di stampa standard" },
+                  { quality: "medium" as const, label: "Media", hint: "1200 DPI · alta nitidezza" },
+                  { quality: "high" as const, label: "Alta", hint: "2400 DPI · massima nitidezza, file più pesante" },
+                ]
+              ).map(({ quality, label, hint }) => (
+                <button
+                  key={quality}
+                  onClick={() => chooseExportQuality(quality)}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: 2,
+                    border: "1px solid var(--rule)",
+                    borderRadius: 8,
+                    padding: "10px 12px",
+                    background: "var(--paper)",
+                    cursor: "pointer",
+                    color: "var(--ink)",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{label}</span>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{hint}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setQualityDialogOpen(false)}
+                style={{ border: "1px solid var(--rule)", borderRadius: 6, padding: "6px 12px", fontSize: 13, background: "var(--paper)", cursor: "pointer", color: "var(--ink)" }}
+              >
+                Annulla
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       <EditingToolbar
         mode={mode}
         setMode={setMode}
@@ -747,6 +836,8 @@ export function DiagramViewer({ diagram, title, subtitle, inTeams }: Props) {
         onNewDiagram={handleNewDiagramClick}
         onOpenFile={handleOpenFile}
         onSaveFile={handleSaveFile}
+        onExportPdf={() => setQualityDialogOpen(true)}
+        exportingPdf={isExportingPdf}
         hasFileHandle={!!fileHandle}
         rightOffset={chatOpen ? 360 : 20}
       />

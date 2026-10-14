@@ -101,6 +101,11 @@ body {
     transform: translateX(0);
   }
 }
+@keyframes eosSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @keyframes eosOverlayIn {
   from {
     opacity: 0;

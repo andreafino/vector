@@ -3,6 +3,7 @@ const { spawn } = require("node:child_process");
 const { randomBytes, randomUUID } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { renderDiagramPdf, validateRequestBody, ValidationError } = require("./pdfExport.cjs");
 
 const APP_ICON = path.join(__dirname, "..", "build", "icon.png");
 const MCP_PORT = 3939;
@@ -258,6 +259,16 @@ ipcMain.handle("mcp:regenerate-token", async () => {
 });
 ipcMain.handle("mcp:tunnel-start", () => startTunnel());
 ipcMain.handle("mcp:tunnel-stop", () => stopTunnel());
+
+ipcMain.handle("export-pdf", async (_event, body) => {
+  try {
+    validateRequestBody(body);
+    return await renderDiagramPdf(body);
+  } catch (err) {
+    if (err instanceof ValidationError) throw err;
+    throw new Error(err instanceof Error ? err.message : "Errore sconosciuto nella generazione del PDF.");
+  }
+});
 
 app.whenReady().then(() => {
   const splash = createSplashWindow();

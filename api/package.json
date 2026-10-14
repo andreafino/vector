@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@azure/functions": "^4.7.0",
-    "@azure/msal-node": "^2.16.2"
+    "@azure/msal-node": "^2.16.2",
+    "@resvg/resvg-js": "^2.6.2",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

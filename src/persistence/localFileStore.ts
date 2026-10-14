@@ -43,16 +43,20 @@ async function openViaInputFallback(): Promise<DiagramFileV1> {
   });
 }
 
-function downloadViaAnchor(data: DiagramFileV1): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "architettura.json";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function downloadViaAnchor(data: DiagramFileV1): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  downloadBlob(blob, "architettura.json");
 }
 
 export async function openDiagramFile(): Promise<{ data: DiagramFileV1; handle?: FileSystemFileHandleLike }> {

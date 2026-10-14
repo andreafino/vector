@@ -152,6 +152,26 @@ export function NewFileIcon({ size = 20, style }: IconProps) {
   );
 }
 
+export function PrinterIcon({ size = 20, style }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" style={{ ...base(size), ...style }} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9V4h12v5" />
+      <rect x="4" y="9" width="16" height="8" rx="1.5" />
+      <path d="M8 13h8v7H8z" />
+    </svg>
+  );
+}
+
+// Anello che ruota (via keyframes "eosSpin" in index.css), usato al posto dell'icona statica mentre
+// l'export PDF è in corso.
+export function SpinnerIcon({ size = 20, style }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" style={{ ...base(size), ...style, animation: "eosSpin 0.8s linear infinite" }} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+      <path d="M12 2a10 10 0 0 1 10 10" />
+    </svg>
+  );
+}
+
 export function SunIcon({ size = 16, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" style={{ ...base(size), ...style }} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">

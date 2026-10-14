@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import type { Version } from "../store/diagramStore";
 import type { EditMode } from "./types";
-import { AddEntityIcon, ConnectIcon, ContainerIcon, CursorIcon, DeleteIcon, EntityIcon, HistoryIcon, NewFileIcon, OpenFileIcon, RedoIcon, SaveFileIcon, ToolsIcon, UndoIcon } from "./icons";
+import { AddEntityIcon, ConnectIcon, ContainerIcon, CursorIcon, DeleteIcon, EntityIcon, HistoryIcon, NewFileIcon, OpenFileIcon, PrinterIcon, RedoIcon, SaveFileIcon, SpinnerIcon, ToolsIcon, UndoIcon } from "./icons";
 
 interface Props {
   mode: EditMode;
@@ -16,13 +16,15 @@ interface Props {
   onNewDiagram: () => void;
   onOpenFile: () => void;
   onSaveFile: () => void;
+  onExportPdf: () => void;
+  exportingPdf?: boolean;
   hasFileHandle: boolean;
   rightOffset?: number;
 }
 
 const addModes: EditMode[] = ["add-entity", "add-container"];
 
-export function EditingToolbar({ mode, setMode, versions, index, canUndo, canRedo, undo, redo, goto, onNewDiagram, onOpenFile, onSaveFile, hasFileHandle, rightOffset = 20 }: Props) {
+export function EditingToolbar({ mode, setMode, versions, index, canUndo, canRedo, undo, redo, goto, onNewDiagram, onOpenFile, onSaveFile, onExportPdf, exportingPdf = false, hasFileHandle, rightOffset = 20 }: Props) {
   const [open, setOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -125,6 +127,9 @@ export function EditingToolbar({ mode, setMode, versions, index, canUndo, canRed
           </button>
           <button title={hasFileHandle ? "Salva" : "Salva come…"} aria-label="Salva" onClick={onSaveFile} style={toolBtn(false)}>
             <SaveFileIcon size={20} />
+          </button>
+          <button title={exportingPdf ? "Generazione PDF in corso…" : "Esporta PDF"} aria-label="Esporta PDF" onClick={onExportPdf} disabled={exportingPdf} style={toolBtn(false, !exportingPdf)}>
+            {exportingPdf ? <SpinnerIcon size={20} /> : <PrinterIcon size={20} />}
           </button>
         </div>
       )}

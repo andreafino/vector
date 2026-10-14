@@ -7,6 +7,7 @@ function subscribe(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld("vectorDesktop", {
+  exportPdf: (payload) => ipcRenderer.invoke("export-pdf", payload),
   mcp: {
     status: () => ipcRenderer.invoke("mcp:status"),
     start: () => ipcRenderer.invoke("mcp:start"),

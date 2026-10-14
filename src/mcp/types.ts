@@ -22,7 +22,27 @@ export interface McpCall {
   client: string;
 }
 
+export interface ExportPdfTechnology {
+  id: string;
+  g: string;
+  n: string;
+  d: string;
+  mono?: string;
+  iconDataUri?: string;
+  entities: string[];
+}
+
+export interface ExportPdfPayload {
+  title: string;
+  diagramSvg: string;
+  diagramWidth: number;
+  diagramHeight: number;
+  diagramDpi: number;
+  technologies: ExportPdfTechnology[];
+}
+
 export interface VectorDesktopApi {
+  exportPdf: (payload: ExportPdfPayload) => Promise<Uint8Array>;
   mcp: {
     status: () => Promise<McpStatus>;
     start: () => Promise<McpStatus>;

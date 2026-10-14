@@ -17,6 +17,8 @@
     "@iconify-json/logos": "^1.2.15",
     "@microsoft/teams-js": "^2.57.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "@resvg/resvg-js": "^2.6.2",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4",
