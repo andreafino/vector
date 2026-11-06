@@ -42,7 +42,7 @@ Modifiche (solo con **Consenti modifiche** attivo): le stesse operazioni dell'as
 - contenitori: `addBand`, `updateBand` (rinomina, posizione, dimensioni), `deleteBand` (elimina anche le entità al suo interno);
 - entità: `addEntity`, `updateEntity`, `moveEntity`, `deleteElement`;
 - dettagli interni alle entità: `addEntityModule`, `updateEntityModule`, `deleteEntityModule`;
-- collegamenti e flussi: `addEdge`, `updateEdge`, `addFlow` (crea un flusso vuoto e restituisce l'id), `addFlowStep` (aggiunge un passo a un flusso per id);
+- collegamenti e flussi: `addEdge`, `updateEdge`, `addFlow` (crea un flusso vuoto e restituisce l'id), `addFlowStep` (aggiunge un passo a un flusso per id, in coda o in una posizione; collegamento e direzione si deducono dalle entità), `updateFlow`, `updateFlowStep`, `deleteFlowStep`, `moveFlowStep` (i passi si indicano col numero da 1; `getFlow` li elenca);
 - tecnologie: `addTechnology`, `updateTechnology`.
 
 Le icone si impostano con il campo `icona` di `addEntity`, `updateEntity`, `addTechnology` e `updateTechnology`. L'id va preso da `listIcons`: un id inesistente viene rifiutato con un messaggio di errore, invece di creare un'icona rotta.

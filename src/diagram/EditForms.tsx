@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { Diagram } from "../types/diagram";
 import { EntityPicker, IconPicker, TechnologyPicker, type NewTechnology } from "./EntityFormFields";
+import { iconLabel, suggestIcon } from "./iconSuggest";
 
 interface PopoverProps {
   clientX: number;
@@ -123,8 +124,16 @@ export function EntityCreateForm({
   const [sottotitolo, setSottotitolo] = useState("");
   const [descrizione, setDescrizione] = useState("");
   const [icon, setIcon] = useState<string | undefined>(undefined);
+  // Finché l'utente non sceglie un'icona a mano (anche "nessuna"), l'icona segue la proposta ricavata dal nome.
+  const [iconTouched, setIconTouched] = useState(false);
   const [technologyIds, setTechnologyIds] = useState<Set<string>>(new Set());
   const [newTechnologies, setNewTechnologies] = useState<NewTechnology[]>([]);
+  const proposed = suggestIcon(nome);
+
+  const changeNome = (value: string) => {
+    setNome(value);
+    if (!iconTouched) setIcon(suggestIcon(value));
+  };
 
   const toggleTech = (id: string) => {
     setTechnologyIds((prev) => {
@@ -163,8 +172,11 @@ export function EntityCreateForm({
     >
       <label style={field}>
         <span style={label}>Nome *</span>
-        <input style={input} value={nome} onChange={(e) => setNome(e.target.value)} autoFocus />
+        <input style={input} value={nome} onChange={(e) => changeNome(e.target.value)} autoFocus />
       </label>
+      {proposed && icon === proposed && (
+        <span style={{ fontSize: 12, color: "var(--accent-ink)" }}>Icona proposta dal nome: {iconLabel(proposed)}. Puoi sceglierne un'altra qui sotto.</span>
+      )}
       <label style={field}>
         <span style={label}>Sottotitolo</span>
         <input style={input} value={sottotitolo} onChange={(e) => setSottotitolo(e.target.value)} />
@@ -173,7 +185,13 @@ export function EntityCreateForm({
         <span style={label}>Descrizione</span>
         <textarea style={{ ...input, resize: "vertical", minHeight: 50 }} value={descrizione} onChange={(e) => setDescrizione(e.target.value)} />
       </label>
-      <IconPicker value={icon} onChange={setIcon} />
+      <IconPicker
+        value={icon}
+        onChange={(next) => {
+          setIconTouched(true);
+          setIcon(next);
+        }}
+      />
       <TechnologyPicker
         technologies={diagram.technologies}
         selected={technologyIds}
@@ -285,6 +303,63 @@ export function TechnologyCreateForm({ diagram, onCancel, onSubmit }: { diagram:
       </label>
       <IconPicker value={icon} onChange={setIcon} />
       <EntityPicker entities={diagram.entities} selected={entityIds} onToggle={toggleEntity} />
+    </SidePanel>
+  );
+}
+
+interface FlowFormValues {
+  titolo: string;
+  gruppo: string;
+  dove: string;
+  nota: string;
+}
+
+export function FlowCreateForm({ diagram, onCancel, onSubmit }: { diagram: Diagram; onCancel: () => void; onSubmit: (values: FlowFormValues) => void }) {
+  const [titolo, setTitolo] = useState("");
+  const [gruppo, setGruppo] = useState("");
+  const [dove, setDove] = useState("");
+  const [nota, setNota] = useState("");
+  const gruppiEsistenti = [...new Set(diagram.flows.map((f) => f.g))];
+  const valid = !!titolo.trim();
+  const submit = () => onSubmit({ titolo: titolo.trim(), gruppo: gruppo.trim(), dove: dove.trim(), nota: nota.trim() });
+
+  return (
+    <SidePanel
+      title="Nuovo flusso"
+      subtitle="I passi si aggiungono dopo la creazione"
+      onClose={onCancel}
+      footer={
+        <>
+          <button onClick={onCancel} style={btnSecondary}>
+            Annulla
+          </button>
+          <button disabled={!valid} onClick={submit} style={btnPrimary(valid)}>
+            Crea
+          </button>
+        </>
+      }
+    >
+      <label style={field}>
+        <span style={label}>Titolo *</span>
+        <input style={input} value={titolo} onChange={(e) => setTitolo(e.target.value)} autoFocus />
+      </label>
+      <label style={field}>
+        <span style={label}>Gruppo</span>
+        <input style={input} list="eos-gruppi-flusso" value={gruppo} onChange={(e) => setGruppo(e.target.value)} placeholder="es. Percorso di un ordine" />
+        <datalist id="eos-gruppi-flusso">
+          {gruppiEsistenti.map((g) => (
+            <option key={g} value={g} />
+          ))}
+        </datalist>
+      </label>
+      <label style={field}>
+        <span style={label}>Dove si svolge</span>
+        <input style={input} value={dove} onChange={(e) => setDove(e.target.value)} placeholder="es. Business Central, publisher" />
+      </label>
+      <label style={field}>
+        <span style={label}>Nota</span>
+        <textarea style={{ ...input, resize: "vertical", minHeight: 50 }} value={nota} onChange={(e) => setNota(e.target.value)} />
+      </label>
     </SidePanel>
   );
 }

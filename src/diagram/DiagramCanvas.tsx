@@ -3,6 +3,23 @@ import { useRef, useState } from "react";
 import type { Band, Diagram, Edge, Entity, Point } from "../types/diagram";
 import type { EditMode, Highlight } from "./types";
 import { resolveIconUrl } from "./iconCatalog";
+import { fitText, type TextFont } from "./textFit";
+
+// Spazio per i testi dentro il rettangolo dell'entità (240 di larghezza): titolo e sottotitoli partono
+// a x+60 e si fermano 12px prima del bordo; i dettagli stanno in un riquadro da 216 con 12px di margine.
+const TITLE_MAX_WIDTH = 168;
+const MODULE_MAX_WIDTH = 192;
+
+// Testo troncato con "…" che non entra nello spazio; il testo completo resta nel tooltip nativo (solo se troncato).
+function Fitted({ text, maxWidth, font }: { text: string; maxWidth: number; font: TextFont }) {
+  const fitted = fitText(text, maxWidth, font);
+  return (
+    <>
+      {fitted !== text && <title>{text}</title>}
+      {fitted}
+    </>
+  );
+}
 import {
   type BandResizeEdges,
   type Rect,
@@ -991,11 +1008,11 @@ function EntityNode({
         )}
       </g>
       <text x={n.x + 60} y={n.y + 30} fill="var(--ink)" style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Semi Condensed',sans-serif" }}>
-        {n.n}
+        <Fitted text={n.n} maxWidth={TITLE_MAX_WIDTH} font={{ size: 15, weight: 700, family: "'Barlow Semi Condensed',sans-serif" }} />
       </text>
       {(n.s ?? []).map((s, i) => (
         <text key={`s${i}`} x={n.x + 60} y={n.y + 47 + i * 15} fill="var(--muted)" style={{ fontSize: 11.5 }}>
-          {s}
+          <Fitted text={s} maxWidth={TITLE_MAX_WIDTH} font={{ size: 11.5 }} />
         </text>
       ))}
       {n.mods && (
@@ -1007,12 +1024,13 @@ function EntityNode({
             const mc = !!(hl?.cur && hl.cur.mods.has(m.id));
             return (
               <g key={m.id}>
-                <rect x={n.x + 12} y={my} width={216} height={40} rx={5} fill={mh ? "var(--accent-soft)" : "var(--paper)"} stroke={mh ? "var(--accent)" : "var(--rule)"} strokeWidth={mc ? 2 : 1.1} />
+                {mc && <rect x={n.x + 9} y={my - 3} width={222} height={46} rx={8} fill="none" stroke="var(--accent)" strokeWidth={4} style={{ animation: "eosPulse 1.4s ease-in-out infinite" }} />}
+                <rect x={n.x + 12} y={my} width={216} height={40} rx={5} fill={mc ? "var(--accent-soft)" : "var(--paper)"} stroke={mh ? "var(--accent)" : "var(--rule)"} strokeWidth={mc ? 2.4 : mh ? 1.4 : 1.1} />
                 <text x={n.x + 24} y={my + 17} fill="var(--ink)" style={{ fontSize: 12.5, fontWeight: 600 }}>
-                  {m.t}
+                  <Fitted text={m.t} maxWidth={MODULE_MAX_WIDTH} font={{ size: 12.5, weight: 600 }} />
                 </text>
                 <text x={n.x + 24} y={my + 32} fill="var(--muted)" style={{ fontSize: 11 }}>
-                  {m.s}
+                  <Fitted text={m.s} maxWidth={MODULE_MAX_WIDTH} font={{ size: 11 }} />
                 </text>
               </g>
             );

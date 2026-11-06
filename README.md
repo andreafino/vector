@@ -48,6 +48,7 @@ Vedi `SPEC.md` per la specifica funzionale e `CLAUDE.md` per le istruzioni di sv
 
 ### Assistente in chat
 
+- Flussi e passi si creano e si modificano anche a mano dalla scheda **Flussi** (Nuovo flusso, Modifica/Elimina, Aggiungi/modifica/sposta/elimina passo). Eliminando entità, collegamenti o dettagli, i passi collegati vengono ripuliti automaticamente.
 - Pannello di chat basato su **Claude (Anthropic)** con *tool calling*: l'assistente usa esattamente gli stessi comandi dell'editor manuale (`addEntity`, `addEdge`, `addFlow`, `addTechnology`, `updateEntity`, `deleteElement`, ...), quindi annulla/ripeti e storico versioni funzionano allo stesso modo sia che la modifica arrivi dalla UI sia dalla chat.
 - Richiede una chiave API Anthropic personale, inserita e salvata localmente dal pannello della chat.
 

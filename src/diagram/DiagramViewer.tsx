@@ -8,16 +8,22 @@ import {
   addEdge,
   addEntity,
   addEntityModule,
+  addFlow,
+  addFlowStep,
   addTechnology,
   deleteElement,
   deleteEntityModule,
+  deleteFlowStep,
   moveBand,
   moveEntity,
+  moveFlowStep,
   reanchorEdge,
   resizeBandManually,
   updateEdge,
   updateEntity,
   updateEntityModule,
+  updateFlow,
+  updateFlowStep,
   updateTechnology,
 } from "../commands/commands";
 import type { BandResizeEdges } from "./geometry";
@@ -29,7 +35,7 @@ import { computeBounds } from "./geometry";
 import { DiagramCanvas } from "./DiagramCanvas";
 import { Sidebar } from "./Sidebar";
 import { EditingToolbar } from "./EditingToolbar";
-import { EntityCreateForm, EdgeCreateForm, BandCreateForm, TechnologyCreateForm } from "./EditForms";
+import { EntityCreateForm, EdgeCreateForm, BandCreateForm, TechnologyCreateForm, FlowCreateForm } from "./EditForms";
 import { IconChangeDialog } from "./IconChangeDialog";
 import type { EditMode, Theme } from "./types";
 import { fromFileContents, toFileContents } from "../persistence/diagramFile";
@@ -188,6 +194,7 @@ export function DiagramViewer({ diagram, title, subtitle, inTeams }: Props) {
   const [edgePopover, setEdgePopover] = useState<PendingEdgePopover | null>(null);
   const [bandPopover, setBandPopover] = useState<PendingBandPopover | null>(null);
   const [technologyPanelOpen, setTechnologyPanelOpen] = useState(false);
+  const [flowPanelOpen, setFlowPanelOpen] = useState(false);
   const [iconDialogTarget, setIconDialogTarget] = useState<{ kind: "entity" | "technology"; id: string } | null>(null);
 
   useEffect(() => {
@@ -492,6 +499,19 @@ export function DiagramViewer({ diagram, title, subtitle, inTeams }: Props) {
             onEditTechnologyIcon={(technologyId) => setIconDialogTarget({ kind: "technology", id: technologyId })}
             onCollapse={() => setSidebarCollapsed(true)}
             onNewTechnology={() => setTechnologyPanelOpen(true)}
+            onNewFlow={() => setFlowPanelOpen(true)}
+            onUpdateFlow={(id, patch) => apply(updateFlow(id, patch))}
+            onDeleteFlow={(id) => {
+              apply(deleteElement("flow", id));
+              if (sel?.kind === "flow" && sel.id === id) clearSel();
+            }}
+            onAddFlowStep={(flowId, step) => apply(addFlowStep(flowId, step))}
+            onUpdateFlowStep={(flowId, index, step) => apply(updateFlowStep(flowId, index, step))}
+            onDeleteFlowStep={(flowId, index) => apply(deleteFlowStep(flowId, index))}
+            onMoveFlowStep={(flowId, from, to) => {
+              apply(moveFlowStep(flowId, from, to));
+              if (hop === from) setHop(to);
+            }}
           />
         )}
         {sidebarCollapsed && (
@@ -624,6 +644,19 @@ export function DiagramViewer({ diagram, title, subtitle, inTeams }: Props) {
               })
             );
             setBandPopover(null);
+          }}
+        />
+      )}
+
+      {flowPanelOpen && (
+        <FlowCreateForm
+          diagram={diagram}
+          onCancel={() => setFlowPanelOpen(false)}
+          onSubmit={({ titolo, gruppo, dove, nota }) => {
+            const id = uniqueId(`f-${slugify(titolo)}`, (candidate) => diagram.flows.some((f) => f.id === candidate));
+            apply(addFlow({ id, g: gruppo || "Flussi", t: titolo, w: dove, note: nota || undefined, h: [] }));
+            select("flow", id, "flows");
+            setFlowPanelOpen(false);
           }}
         />
       )}

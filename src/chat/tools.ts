@@ -1,4 +1,4 @@
-import type { Diagram, FlowStepRaw, Technology } from "../types/diagram";
+import type { Diagram, Edge, FlowStepRaw, Technology } from "../types/diagram";
 import type { Command } from "../commands/types";
 import type { DeletableKind } from "../commands/commands";
 import {
@@ -12,16 +12,23 @@ import {
   deleteBand,
   deleteElement,
   deleteEntityModule,
+  deleteFlowStep,
+  insertFlowStep,
   moveEntity,
+  moveFlowStep,
   updateBand,
   updateEdge,
   updateEntity,
   updateEntityModule,
+  updateFlow,
+  updateFlowStep,
   updateTechnology,
 } from "../commands/commands";
+import { directionFor, findEdgesBetween } from "../diagram/flowSteps";
 import { DEFAULT_ENTITY_HEIGHT, clampEntityPosition, midpointOfPath, orthogonalEdgePath } from "../diagram/geometry";
 import { monogram, slugify, uniqueId } from "../diagram/ids";
 import { ICON_CATALOG, SEARCHABLE_ICONS } from "../diagram/iconCatalog";
+import { suggestIcon } from "../diagram/iconSuggest";
 import type { AnthropicTool } from "./anthropicClient";
 
 export interface ChatTool {
@@ -54,11 +61,6 @@ function requireEdge(diagram: Diagram, id: string) {
   const edge = diagram.edges.find((e) => e.id === id);
   if (!edge) throw new Error(`Nessun collegamento con id "${id}".`);
   return edge;
-}
-
-function findEdgeBetween(diagram: Diagram, aId: string, bId: string): string | null {
-  const edge = diagram.edges.find((e) => (e.a === aId && e.b === bId) || (e.a === bId && e.b === aId));
-  return edge?.id ?? null;
 }
 
 // Valida un id icona contro il catalogo curato (ICON_CATALOG) e quello esteso Azure/Microsoft 365/loghi
@@ -94,7 +96,8 @@ const toolAddEntity: ChatTool = {
     const bandaLabel = String(input.banda ?? "");
     if (!nome) throw new Error("Il nome dell'entità non può essere vuoto.");
     const band = requireBand(diagram, bandaLabel);
-    const icon = validateIcon(typeof input.icona === "string" ? input.icona : undefined);
+    // Icona omessa: stessa proposta dal nome che vede chi crea l'entità a mano.
+    const icon = validateIcon(typeof input.icona === "string" ? input.icona : undefined) ?? suggestIcon(nome);
     const id = uniqueId(slugify(nome), (candidate) => diagram.entities.some((e) => e.id === candidate));
 
     let x: number;
@@ -287,6 +290,7 @@ const toolAddFlow: ChatTool = {
       titolo: { type: "string" },
       gruppo: { type: "string" },
       dove: { type: "string", description: "Dove si svolge il flusso (sistemi coinvolti)" },
+      nota: { type: "string", description: "Nota opzionale" },
     },
     required: ["titolo", "gruppo", "dove"],
   },
@@ -295,37 +299,160 @@ const toolAddFlow: ChatTool = {
     if (!titolo) throw new Error("Il titolo del flusso non può essere vuoto.");
     const gruppo = String(input.gruppo ?? "").trim() || "Flussi";
     const dove = String(input.dove ?? "").trim();
+    const nota = typeof input.nota === "string" ? input.nota.trim() : "";
     const id = uniqueId(`f-${slugify(titolo)}`, (candidate) => diagram.flows.some((f) => f.id === candidate));
-    return addFlow({ id, g: gruppo, t: titolo, w: dove, h: [] });
+    return addFlow({ id, g: gruppo, t: titolo, w: dove, note: nota || undefined, h: [] });
   },
+};
+
+function requireFlow(diagram: Diagram, id: string) {
+  const flow = diagram.flows.find((f) => f.id === id);
+  if (!flow) throw new Error(`Nessun flusso con id "${id}".`);
+  return flow;
+}
+
+// Numero di passo 1-based (come lo vede l'utente) → indice 0-based, validato contro il flusso.
+function stepIndex(flow: { h: unknown[]; id: string }, value: unknown): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > flow.h.length) {
+    throw new Error(`Il flusso "${flow.id}" ha ${flow.h.length} passi: il numero di passo deve essere tra 1 e ${flow.h.length}.`);
+  }
+  return n - 1;
+}
+
+// Costruisce la tupla di un passo dai parametri dei tool. Il collegamento è quello indicato oppure l'unico
+// tra le due entità; la direzione si deduce dal verso reale del collegamento.
+function buildStep(diagram: Diagram, input: Record<string, unknown>): FlowStepRaw {
+  const da = String(input.da ?? "");
+  const a = String(input.a ?? "");
+  requireEntity(diagram, da);
+  requireEntity(diagram, a);
+  let edge: Edge | undefined;
+  if (typeof input.collegamentoId === "string" && input.collegamentoId) {
+    edge = requireEdge(diagram, input.collegamentoId);
+    const touches = (edge.a === da && edge.b === a) || (edge.a === a && edge.b === da);
+    if (!touches) throw new Error(`Il collegamento "${edge.id}" non unisce "${da}" e "${a}".`);
+  } else {
+    edge = findEdgesBetween(diagram, da, a)[0];
+  }
+  const direzione: 1 | -1 = edge ? directionFor(edge, da) : input.direzione === -1 ? -1 : 1;
+  const step: FlowStepRaw = [da, a, edge?.id ?? null, direzione, String(input.etichetta ?? "").trim()];
+  if (Array.isArray(input.moduli) && input.moduli.length > 0) {
+    const moduli = input.moduli.map(String);
+    for (const ref of moduli) {
+      const owner = [da, a].map((id) => requireEntity(diagram, id)).find((e) => e.mods?.some((m) => m.id === ref));
+      if (!owner) throw new Error(`Nessun dettaglio con id "${ref}" nelle entità "${da}" e "${a}".`);
+    }
+    step.push(moduli);
+  }
+  return step;
+}
+
+const STEP_PROPERTIES = {
+  da: { type: "string", description: "Id entità di partenza del passo" },
+  a: { type: "string", description: "Id entità di arrivo del passo" },
+  etichetta: { type: "string", description: "Descrizione del passo" },
+  collegamentoId: { type: "string", description: "Id del collegamento tra le due entità; se omesso si usa quello esistente tra loro (se c'è)" },
+  direzione: { type: "integer", enum: [1, -1], description: "Usata solo se non c'è un collegamento; altrimenti la direzione si deduce dal verso del collegamento" },
+  moduli: { type: "array", items: { type: "string" }, description: "Id dei dettagli (mods) delle due entità coinvolti nel passo, es. \"bc.op\"" },
 };
 
 const toolAddFlowStep: ChatTool = {
   name: "addFlowStep",
   description:
-    "Aggiunge un passo in coda a un flusso esistente. Entità di partenza e di arrivo devono esistere; se c'è un collegamento tra le due entità viene associato automaticamente.",
+    "Aggiunge un passo a un flusso esistente (in coda, o nella posizione indicata). Entità di partenza e di arrivo devono esistere; se c'è un collegamento tra le due entità viene associato automaticamente e la direzione si deduce dal suo verso.",
   input_schema: {
     type: "object",
     properties: {
       flowId: { type: "string", description: "Id del flusso (restituito da addFlow)" },
-      da: { type: "string", description: "Id entità di partenza del passo" },
-      a: { type: "string", description: "Id entità di arrivo del passo" },
-      etichetta: { type: "string", description: "Descrizione del passo" },
-      direzione: { type: "integer", enum: [1, -1], description: "1 se il collegamento va letto da 'da' verso 'a' (default), -1 se al contrario" },
+      ...STEP_PROPERTIES,
+      posizione: { type: "integer", description: "Numero (da 1) che il nuovo passo avrà nel flusso; se omesso va in coda" },
     },
     required: ["flowId", "da", "a", "etichetta"],
   },
   execute(input, diagram) {
-    const flowId = String(input.flowId ?? "");
-    if (!diagram.flows.some((f) => f.id === flowId)) throw new Error(`Nessun flusso con id "${flowId}".`);
-    const da = String(input.da ?? "");
-    const a = String(input.a ?? "");
-    requireEntity(diagram, da);
-    requireEntity(diagram, a);
-    const edgeId = findEdgeBetween(diagram, da, a);
-    const direzione: 1 | -1 = input.direzione === -1 ? -1 : 1;
-    const step: FlowStepRaw = [da, a, edgeId, direzione, String(input.etichetta ?? "").trim()];
-    return addFlowStep(flowId, step);
+    const flow = requireFlow(diagram, String(input.flowId ?? ""));
+    const step = buildStep(diagram, input);
+    if (input.posizione === undefined) return addFlowStep(flow.id, step);
+    const pos = Number(input.posizione);
+    if (!Number.isInteger(pos) || pos < 1 || pos > flow.h.length + 1) {
+      throw new Error(`La posizione deve essere tra 1 e ${flow.h.length + 1}.`);
+    }
+    return insertFlowStep(flow.id, pos - 1, step);
+  },
+};
+
+const toolUpdateFlow: ChatTool = {
+  name: "updateFlow",
+  description: "Modifica titolo, gruppo, luogo o nota di un flusso esistente.",
+  input_schema: {
+    type: "object",
+    properties: {
+      flowId: { type: "string" },
+      titolo: { type: "string" },
+      gruppo: { type: "string" },
+      dove: { type: "string" },
+      nota: { type: "string", description: "Stringa vuota per rimuovere la nota" },
+    },
+    required: ["flowId"],
+  },
+  execute(input, diagram) {
+    const flow = requireFlow(diagram, String(input.flowId ?? ""));
+    const patch: { t?: string; g?: string; w?: string; note?: string | undefined } = {};
+    if (typeof input.titolo === "string") {
+      if (!input.titolo.trim()) throw new Error("Il titolo del flusso non può essere vuoto.");
+      patch.t = input.titolo.trim();
+    }
+    if (typeof input.gruppo === "string" && input.gruppo.trim()) patch.g = input.gruppo.trim();
+    if (typeof input.dove === "string") patch.w = input.dove.trim();
+    if (typeof input.nota === "string") patch.note = input.nota.trim() || undefined;
+    return updateFlow(flow.id, patch);
+  },
+};
+
+const toolUpdateFlowStep: ChatTool = {
+  name: "updateFlowStep",
+  description: "Sostituisce un passo di un flusso (indicato dal numero, da 1). Passa tutti i campi del passo, non solo quelli che cambiano.",
+  input_schema: {
+    type: "object",
+    properties: { flowId: { type: "string" }, passo: { type: "integer", description: "Numero del passo, da 1" }, ...STEP_PROPERTIES },
+    required: ["flowId", "passo", "da", "a", "etichetta"],
+  },
+  execute(input, diagram) {
+    const flow = requireFlow(diagram, String(input.flowId ?? ""));
+    return updateFlowStep(flow.id, stepIndex(flow, input.passo), buildStep(diagram, input));
+  },
+};
+
+const toolDeleteFlowStep: ChatTool = {
+  name: "deleteFlowStep",
+  description: "Elimina un passo da un flusso (indicato dal numero, da 1).",
+  input_schema: {
+    type: "object",
+    properties: { flowId: { type: "string" }, passo: { type: "integer", description: "Numero del passo, da 1" } },
+    required: ["flowId", "passo"],
+  },
+  execute(input, diagram) {
+    const flow = requireFlow(diagram, String(input.flowId ?? ""));
+    return deleteFlowStep(flow.id, stepIndex(flow, input.passo));
+  },
+};
+
+const toolMoveFlowStep: ChatTool = {
+  name: "moveFlowStep",
+  description: "Sposta un passo di un flusso in un'altra posizione (numeri da 1).",
+  input_schema: {
+    type: "object",
+    properties: {
+      flowId: { type: "string" },
+      passo: { type: "integer", description: "Numero attuale del passo, da 1" },
+      nuovaPosizione: { type: "integer", description: "Numero che il passo dovrà avere, da 1" },
+    },
+    required: ["flowId", "passo", "nuovaPosizione"],
+  },
+  execute(input, diagram) {
+    const flow = requireFlow(diagram, String(input.flowId ?? ""));
+    return moveFlowStep(flow.id, stepIndex(flow, input.passo), stepIndex(flow, input.nuovaPosizione));
   },
 };
 
@@ -538,6 +665,10 @@ export const CHAT_TOOLS: ChatTool[] = [
   toolUpdateEdge,
   toolAddFlow,
   toolAddFlowStep,
+  toolUpdateFlow,
+  toolUpdateFlowStep,
+  toolDeleteFlowStep,
+  toolMoveFlowStep,
   toolAddTechnology,
   toolUpdateTechnology,
   toolUpdateEntity,

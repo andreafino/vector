@@ -317,3 +317,22 @@ describe("editing manuale nella UI", () => {
     expect(updated.mono).toBe("EA");
   });
 });
+
+describe("icona proposta dal nome", () => {
+  it("segue il nome finché non si sceglie un'icona a mano", async () => {
+    resetStore(fixture());
+    const user = userEvent.setup();
+    render(<TestApp />);
+
+    await user.click(screen.getByRole("button", { name: "Strumenti di modifica" }));
+    await user.click(screen.getByRole("button", { name: "Nuovo" }));
+    await user.click(screen.getByRole("button", { name: "Entità" }));
+    fireEvent.click(screen.getByText("Banda A"));
+
+    await user.type(await screen.findByLabelText("Nome *"), "Key Vault");
+    expect(screen.getByText(/Icona proposta dal nome/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Crea" }));
+
+    expect(useDiagramStore.getState().diagram.entities.find((e) => e.n === "Key Vault")?.icon).toBe("kv");
+  });
+});

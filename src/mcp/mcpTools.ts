@@ -48,6 +48,38 @@ const READ_TOOLS: ReadTool[] = [
     read: (_input, diagram) => diagram.flows.map((f) => ({ id: f.id, t: f.t, g: f.g, passi: f.h.length })),
   },
   {
+    name: "getFlow",
+    description: "Restituisce un flusso completo con i suoi passi numerati (da 1), con nomi delle entità, collegamento, direzione e dettagli.",
+    input_schema: {
+      type: "object",
+      properties: { flowId: { type: "string", description: "Id del flusso" } },
+      required: ["flowId"],
+    },
+    read: (input, diagram) => {
+      const flow = diagram.flows.find((f) => f.id === input.flowId);
+      if (!flow) throw new Error(`Nessun flusso con id "${String(input.flowId)}".`);
+      const name = (id: string) => diagram.entities.find((e) => e.id === id)?.n ?? id;
+      return {
+        id: flow.id,
+        t: flow.t,
+        g: flow.g,
+        w: flow.w,
+        note: flow.note ?? null,
+        passi: flow.h.map(([da, a, edgeId, direzione, etichetta, moduli], i) => ({
+          passo: i + 1,
+          da,
+          daNome: name(da),
+          a,
+          aNome: name(a),
+          collegamentoId: edgeId,
+          direzione,
+          etichetta,
+          moduli: moduli ?? [],
+        })),
+      };
+    },
+  },
+  {
     name: "listIcons",
     description:
       "Cerca nel catalogo delle icone disponibili (servizi Azure, Microsoft 365/Teams/Power Platform, loghi generici) e restituisce id ed etichetta. " +

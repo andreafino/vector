@@ -1,5 +1,7 @@
 import { useState, type CSSProperties } from "react";
-import type { Diagram, EntityModule } from "../types/diagram";
+import type { Diagram, EntityModule, FlowStepRaw } from "../types/diagram";
+import { FlowEditForm, FlowStepsEditor } from "./FlowEditors";
+import { suggestIcon } from "./iconSuggest";
 import { entityById, flowGroups, parseFlowSteps } from "../data/loadDiagram";
 import type { Selection, Tab } from "./types";
 import { ChevronDownIcon, CollapseSidebarIcon } from "./icons";
@@ -27,6 +29,13 @@ interface Props {
   onEditTechnologyIcon: (technologyId: string) => void;
   onCollapse: () => void;
   onNewTechnology: () => void;
+  onNewFlow: () => void;
+  onUpdateFlow: (id: string, patch: { t?: string; g?: string; w?: string; note?: string }) => void;
+  onDeleteFlow: (id: string) => void;
+  onAddFlowStep: (flowId: string, step: FlowStepRaw) => void;
+  onUpdateFlowStep: (flowId: string, index: number, step: FlowStepRaw) => void;
+  onDeleteFlowStep: (flowId: string, index: number) => void;
+  onMoveFlowStep: (flowId: string, from: number, to: number) => void;
 }
 
 function nameOf(diagram: Diagram, id: string) {
@@ -68,6 +77,13 @@ export function Sidebar({
   onEditTechnologyIcon,
   onCollapse,
   onNewTechnology,
+  onNewFlow,
+  onUpdateFlow,
+  onDeleteFlow,
+  onAddFlowStep,
+  onUpdateFlowStep,
+  onDeleteFlowStep,
+  onMoveFlowStep,
 }: Props) {
   const tabDefs: [Tab, string, number][] = [
     ["flows", "Flussi", flowGroups(diagram).length],
@@ -118,7 +134,24 @@ export function Sidebar({
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 12px 24px" }}>
         {tab === "flows" && (
-          <FlowsTab diagram={diagram} sel={sel} hop={hop} setHop={setHop} playing={playing} select={select} togglePlay={togglePlay} nextHop={nextHop} prevHop={prevHop} />
+          <FlowsTab
+            diagram={diagram}
+            sel={sel}
+            hop={hop}
+            setHop={setHop}
+            playing={playing}
+            select={select}
+            togglePlay={togglePlay}
+            nextHop={nextHop}
+            prevHop={prevHop}
+            onNewFlow={onNewFlow}
+            onUpdateFlow={onUpdateFlow}
+            onDeleteFlow={onDeleteFlow}
+            onAddFlowStep={onAddFlowStep}
+            onUpdateFlowStep={onUpdateFlowStep}
+            onDeleteFlowStep={onDeleteFlowStep}
+            onMoveFlowStep={onMoveFlowStep}
+          />
         )}
         {tab === "entities" && (
           <EntitiesTab
@@ -168,8 +201,34 @@ function FlowsTab({
   togglePlay,
   nextHop,
   prevHop,
-}: Omit<Props, "tab" | "setTab" | "onUpdateEntity" | "onDeleteEntity" | "onAddEntityModule" | "onUpdateEntityModule" | "onDeleteEntityModule" | "onEditEntityIcon" | "onEditTechnologyIcon" | "onCollapse" | "onNewTechnology">) {
+  onNewFlow,
+  onUpdateFlow,
+  onDeleteFlow,
+  onAddFlowStep,
+  onUpdateFlowStep,
+  onDeleteFlowStep,
+  onMoveFlowStep,
+}: Pick<
+  Props,
+  | "diagram"
+  | "sel"
+  | "hop"
+  | "setHop"
+  | "playing"
+  | "select"
+  | "togglePlay"
+  | "nextHop"
+  | "prevHop"
+  | "onNewFlow"
+  | "onUpdateFlow"
+  | "onDeleteFlow"
+  | "onAddFlowStep"
+  | "onUpdateFlowStep"
+  | "onDeleteFlowStep"
+  | "onMoveFlowStep"
+>) {
   const groups = groupBy(diagram.flows, (f) => f.g);
+  const [editingFlowId, setEditingFlowId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const toggleGroup = (name: string) => {
     setCollapsedGroups((prev) => {
@@ -181,6 +240,12 @@ function FlowsTab({
   };
   return (
     <>
+      <button
+        onClick={onNewFlow}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", border: "1px dashed var(--rule)", borderRadius: 8, padding: "9px 10px", background: "transparent", color: "var(--accent-ink)", cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 4 }}
+      >
+        + Nuovo flusso
+      </button>
       {groups.map((g) => {
         // Un gruppo collassato manualmente resta comunque visibile se contiene il flusso selezionato,
         // altrimenti selezionare un flusso da un'altra vista (es. da un'entità) lo nasconderebbe.
@@ -214,7 +279,14 @@ function FlowsTab({
                     );
                   }
                   const steps = parseFlowSteps(f);
-                  const hopRoute = (from: string, to: string) => `${nameOf(diagram, from)} → ${nameOf(diagram, to)}`;
+                  // Se il passo indica un dettaglio, lo mostro accanto all'entità a cui appartiene (A › Dettaglio → B).
+                  const hopRoute = (from: string, to: string, modules?: string[]) => {
+                    const withDetail = (id: string) => {
+                      const mod = diagram.entities.find((e) => e.id === id)?.mods?.find((m) => modules?.includes(m.id));
+                      return mod ? `${nameOf(diagram, id)} › ${mod.t}` : nameOf(diagram, id);
+                    };
+                    return `${withDetail(from)} → ${withDetail(to)}`;
+                  };
                   return (
                     <div key={f.id} style={{ border: "1px solid var(--accent)", borderRadius: 8, background: "var(--card)", overflow: "hidden" }}>
                       <button onClick={() => select("flow", f.id)} style={{ display: "grid", gridTemplateColumns: "36px minmax(0,1fr)", gap: 10, alignItems: "start", textAlign: "left", border: 0, padding: "10px 10px 8px", background: "transparent", cursor: "pointer", width: "100%" }}>
@@ -225,7 +297,32 @@ function FlowsTab({
                         </span>
                       </button>
                       <div style={{ padding: "0 12px 12px", display: "grid", gap: 10 }}>
-                        {f.note && <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)" }}>{f.note}</p>}
+                        {editingFlowId === f.id ? (
+                          <FlowEditForm
+                            diagram={diagram}
+                            flow={f}
+                            onCancel={() => setEditingFlowId(null)}
+                            onSave={(patch) => {
+                              onUpdateFlow(f.id, patch);
+                              setEditingFlowId(null);
+                            }}
+                          />
+                        ) : (
+                          <>
+                            {f.note && <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)" }}>{f.note}</p>}
+                            <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                              <button onClick={() => setEditingFlowId(f.id)} style={{ ...smallBtn, padding: "4px 8px", fontSize: 12 }}>
+                                Modifica
+                              </button>
+                              <button onClick={() => onDeleteFlow(f.id)} style={{ ...smallBtn, padding: "4px 8px", fontSize: 12, color: "#c0392b", borderColor: "#c0392b" }}>
+                                Elimina
+                              </button>
+                            </div>
+                          </>
+                        )}
+                        {steps.length === 0 && <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>Nessun passo: aggiungine uno qui sotto.</p>}
+                        {steps.length > 0 && (
+                        <>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <button onClick={prevHop} title="Passo precedente" style={navBtn}>
                             ‹
@@ -241,13 +338,18 @@ function FlowsTab({
                           </span>
                         </div>
                         <div style={{ height: 3, background: "var(--rule)", borderRadius: 2, overflow: "hidden" }}>
-                          <div style={{ height: "100%", background: "var(--accent)", width: `${Math.round(((hop + 1) / steps.length) * 100)}%`, transition: "width .35s ease" }} />
+                          <div style={{ height: "100%", background: "var(--accent)", width: `${Math.round((Math.min(hop + 1, steps.length) / steps.length) * 100)}%`, transition: "width .35s ease" }} />
                         </div>
-                        <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 2 }}>
-                          {steps.map((s, j) => {
+                        </>
+                        )}
+                        <FlowStepsEditor
+                          key={f.id}
+                          diagram={diagram}
+                          steps={f.h}
+                          renderStep={(j) => {
+                            const s = steps[j];
                             const cur = j === hop;
                             return (
-                              <li key={j}>
                                 <button
                                   onClick={() => setHop(j)}
                                   style={{ width: "100%", display: "grid", gridTemplateColumns: "22px minmax(0,1fr)", gap: 8, textAlign: "left", border: 0, borderRadius: 6, padding: "7px 8px", background: cur ? "var(--accent-soft)" : "transparent", cursor: "pointer" }}
@@ -271,13 +373,16 @@ function FlowsTab({
                                   </span>
                                   <span style={{ display: "grid", gap: 1, minWidth: 0 }}>
                                     <span style={{ fontSize: 13.5, fontWeight: cur ? 600 : 400 }}>{s.label}</span>
-                                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: cur ? "var(--accent-ink)" : "var(--muted)" }}>{hopRoute(s.from, s.to)}</span>
+                                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: cur ? "var(--accent-ink)" : "var(--muted)" }}>{hopRoute(s.from, s.to, s.modules)}</span>
                                   </span>
                                 </button>
-                              </li>
                             );
-                          })}
-                        </ol>
+                          }}
+                          onAdd={(step) => onAddFlowStep(f.id, step)}
+                          onUpdate={(index, step) => onUpdateFlowStep(f.id, index, step)}
+                          onDelete={(index) => onDeleteFlowStep(f.id, index)}
+                          onMove={(from, to) => onMoveFlowStep(f.id, from, to)}
+                        />
                       </div>
                     </div>
                   );
@@ -535,6 +640,8 @@ function EntityEditForm({
   const [sub, setSub] = useState(entity.s?.[0] ?? "");
   const [desc, setDesc] = useState(entity.desc ?? "");
   const [icon, setIcon] = useState<string | undefined>(entity.icon);
+  // Un'entità senza icona segue la proposta dal nome finché non si sceglie un'icona a mano.
+  const [iconTouched, setIconTouched] = useState(!!entity.icon);
   const [technologyIds, setTechnologyIds] = useState<Set<string>>(() => new Set(diagram.technologies.filter((t) => t.e.includes(entity.id)).map((t) => t.id)));
   const [newTechnologies, setNewTechnologies] = useState<NewTechnology[]>([]);
   const inputStyle: CSSProperties = { border: "1px solid var(--rule)", borderRadius: 6, padding: "6px 8px", fontSize: 13.5, background: "var(--paper)", color: "var(--ink)", font: "inherit", width: "100%" };
@@ -552,7 +659,14 @@ function EntityEditForm({
     <div style={{ display: "grid", gap: 8 }}>
       <label style={{ display: "grid", gap: 4, fontSize: 12.5 }}>
         Nome
-        <input style={inputStyle} value={n} onChange={(e) => setN(e.target.value)} />
+        <input
+          style={inputStyle}
+          value={n}
+          onChange={(e) => {
+            setN(e.target.value);
+            if (!iconTouched) setIcon(suggestIcon(e.target.value));
+          }}
+        />
       </label>
       <label style={{ display: "grid", gap: 4, fontSize: 12.5 }}>
         Sottotitolo
@@ -562,7 +676,13 @@ function EntityEditForm({
         Descrizione
         <textarea style={{ ...inputStyle, resize: "vertical", minHeight: 50 }} value={desc} onChange={(e) => setDesc(e.target.value)} />
       </label>
-      <IconPicker value={icon} onChange={setIcon} />
+      <IconPicker
+        value={icon}
+        onChange={(next) => {
+          setIconTouched(true);
+          setIcon(next);
+        }}
+      />
       <TechnologyPicker
         technologies={diagram.technologies}
         selected={technologyIds}

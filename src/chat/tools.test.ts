@@ -31,6 +31,15 @@ describe("chat tools", () => {
     expect(created?.band).toBe("Banda A");
   });
 
+  it("addEntity propone un'icona dal nome se non indicata", () => {
+    const d = fixture();
+    const tool = findChatTool("addEntity")!;
+    const next = tool.execute({ nome: "Key Vault segreti", banda: "Banda A" }, d).apply(d);
+    expect(next.entities.find((e) => e.n === "Key Vault segreti")?.icon).toBe("kv");
+    const none = tool.execute({ nome: "Pippo", banda: "Banda A" }, d).apply(d);
+    expect(none.entities.find((e) => e.n === "Pippo")?.icon).toBeUndefined();
+  });
+
   it("addEntity lancia un errore se la banda non esiste", () => {
     const d = fixture();
     const tool = findChatTool("addEntity")!;

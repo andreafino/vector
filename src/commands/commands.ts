@@ -1,5 +1,6 @@
 import type { Band, Diagram, Edge, Entity, EntityModule, Flow, FlowStepRaw, Technology } from "../types/diagram";
 import type { Command } from "./types";
+import { cleanFlowSteps } from "../diagram/flowSteps";
 import { type BandResizeEdges, entityHeightForModuleCount, growBandToInclude, orthogonalEdgePath, orthogonalPathBetween, resizeBand, sameBandLabel, sideOfBorderPoint, sideOfPoint, sidePoint } from "../diagram/geometry";
 
 export type DeletableKind = "entity" | "edge" | "flow" | "technology";
@@ -87,7 +88,9 @@ export function deleteBand(label: string): Command {
       const entities = d.entities.filter((e) => !removedIds.has(e.id));
       const edges = d.edges.filter((e) => !removedIds.has(e.a) && !removedIds.has(e.b));
       const technologies = d.technologies.map((t) => ({ ...t, e: t.e.filter((id) => !removedIds.has(id)) }));
-      return { ...d, bands, entities, edges, technologies };
+      const removedEdges = new Set(d.edges.filter((e) => removedIds.has(e.a) || removedIds.has(e.b)).map((e) => e.id));
+      const flows = cleanFlowSteps(d.flows, { entityIds: removedIds, edgeIds: removedEdges });
+      return { ...d, bands, entities, edges, technologies, flows };
     },
   };
 }
@@ -173,6 +176,7 @@ export function deleteEntityModule(entityId: string, moduleId: string): Command 
         const mods = (e.mods ?? []).filter((m) => m.id !== moduleId);
         return { ...e, mods: mods.length > 0 ? mods : undefined, h: entityHeightForModuleCount(mods.length) };
       }),
+      flows: cleanFlowSteps(d.flows, { moduleRefs: new Set([moduleId]) }),
     }),
   };
 }
@@ -233,6 +237,63 @@ export function addFlowStep(flowId: string, step: FlowStepRaw): Command {
   };
 }
 
+export function updateFlow(id: string, patch: Partial<Pick<Flow, "t" | "g" | "w" | "note">>): Command {
+  return {
+    label: `Modifica flusso "${id}"`,
+    apply: (d) => ({ ...d, flows: d.flows.map((f) => (f.id === id ? { ...f, ...patch } : f)) }),
+  };
+}
+
+export function insertFlowStep(flowId: string, index: number, step: FlowStepRaw): Command {
+  return {
+    label: `Aggiunto passo al flusso "${flowId}"`,
+    apply: (d) => ({
+      ...d,
+      flows: d.flows.map((f) => {
+        if (f.id !== flowId) return f;
+        const at = Math.max(0, Math.min(index, f.h.length));
+        return { ...f, h: [...f.h.slice(0, at), step, ...f.h.slice(at)] };
+      }),
+    }),
+  };
+}
+
+export function updateFlowStep(flowId: string, index: number, step: FlowStepRaw): Command {
+  return {
+    label: `Modifica passo ${index + 1} del flusso "${flowId}"`,
+    apply: (d) => ({
+      ...d,
+      flows: d.flows.map((f) => (f.id === flowId ? { ...f, h: f.h.map((s, i) => (i === index ? step : s)) } : f)),
+    }),
+  };
+}
+
+export function deleteFlowStep(flowId: string, index: number): Command {
+  return {
+    label: `Eliminato passo ${index + 1} del flusso "${flowId}"`,
+    apply: (d) => ({
+      ...d,
+      flows: d.flows.map((f) => (f.id === flowId ? { ...f, h: f.h.filter((_, i) => i !== index) } : f)),
+    }),
+  };
+}
+
+export function moveFlowStep(flowId: string, from: number, to: number): Command {
+  return {
+    label: `Spostato passo ${from + 1} del flusso "${flowId}"`,
+    apply: (d) => ({
+      ...d,
+      flows: d.flows.map((f) => {
+        if (f.id !== flowId || from < 0 || from >= f.h.length || to < 0 || to >= f.h.length) return f;
+        const h = [...f.h];
+        const [moved] = h.splice(from, 1);
+        h.splice(to, 0, moved);
+        return { ...f, h };
+      }),
+    }),
+  };
+}
+
 export function addTechnology(technology: Technology): Command {
   return {
     label: `Aggiunta tecnologia "${technology.n}"`,
@@ -256,13 +317,15 @@ export function deleteElement(kind: DeletableKind, id: string): Command {
           const entities = d.entities.filter((e) => e.id !== id);
           const edges = d.edges.filter((e) => e.a !== id && e.b !== id);
           const technologies = d.technologies.map((t) => ({ ...t, e: t.e.filter((eid) => eid !== id) }));
-          return { ...d, entities, edges, technologies };
+          const removedEdges = new Set(d.edges.filter((e) => e.a === id || e.b === id).map((e) => e.id));
+          const flows = cleanFlowSteps(d.flows, { entityIds: new Set([id]), edgeIds: removedEdges });
+          return { ...d, entities, edges, technologies, flows };
         },
       };
     case "edge":
       return {
         label: `Eliminato collegamento "${id}"`,
-        apply: (d) => ({ ...d, edges: d.edges.filter((e) => e.id !== id) }),
+        apply: (d) => ({ ...d, edges: d.edges.filter((e) => e.id !== id), flows: cleanFlowSteps(d.flows, { edgeIds: new Set([id]) }) }),
       };
     case "flow":
       return {

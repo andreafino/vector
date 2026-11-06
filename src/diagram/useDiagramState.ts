@@ -8,7 +8,7 @@ const STEP_MS = 2200;
 export function useDiagramState(diagram: Diagram) {
   const [tab, setTab] = useState<Tab>("flows");
   const [sel, setSel] = useState<Selection | null>({ kind: "flow", id: diagram.flows[0]?.id });
-  const [hop, setHop] = useState(0);
+  const [rawHop, setHop] = useState(0);
   const [playing, setPlaying] = useState(false);
 
   const curFlow = useMemo(() => {
@@ -17,6 +17,9 @@ export function useDiagramState(diagram: Diagram) {
   }, [diagram.flows, sel]);
 
   const curFlowSteps = useMemo(() => (curFlow ? parseFlowSteps(curFlow) : []), [curFlow]);
+
+  // Dopo aver eliminato o spostato passi, il passo corrente può uscire dal flusso: lo riporto in range.
+  const hop = Math.max(0, Math.min(rawHop, curFlowSteps.length - 1));
 
   const select = useCallback((kind: Selection["kind"], id: string, forTab?: Tab) => {
     setSel((prev) => {
